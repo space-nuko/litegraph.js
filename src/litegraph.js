@@ -1228,6 +1228,21 @@
         return L;
     };
 
+    LGraph.prototype.computeExecutionOrderRecursive = function(only_onExecute, set_level) {
+        var L = []
+
+        for (const node of this.computeExecutionOrder(only_onExecute, set_level)) {
+            L.push(node)
+            if (node.type === "graph/subgraph") {
+                for (const innerNode of node.subgraph.computeExecutionOrderRecursive(only_onExecute, set_level)) {
+                    L.push(innerNode)
+                }
+            }
+        }
+
+        return L;
+    }
+
     /**
      * Returns all the nodes that could affect this one (ancestors) by crawling all the inputs recursively.
      * It doesn't include the node itself
@@ -1574,6 +1589,20 @@
         }
         return this._nodes_by_id[id];
     };
+
+    LGraph.prototype.getNodeByIdRecursive = function(id) {
+        const found = this.getNodeById(id);
+        if (found != null)
+            return found;
+
+        for (const node of this.findNodesByType("graph/subgraph")) {
+            const found = node.subgraph.getNodeByIdRecursive(id);
+            if (found)
+                return found;
+        }
+
+        return null;
+    }
 
     /**
      * Returns a list of nodes that matches a class
@@ -2910,12 +2939,12 @@
      * @return {LLink} object or null
      */
     LGraphNode.prototype.getInputLink = function(slot) {
-        if (!this.inputs) {
+        if (!this.inputs || !this.graph) {
             return null;
         }
         if (slot < this.inputs.length) {
             var slot_info = this.inputs[slot];
-			return this.graph.links[ slot_info.link ];
+            return this.graph.links[slot_info.link];
         }
         return null;
     };

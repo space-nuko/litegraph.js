@@ -1,1 +1,2 @@
 ../src/litegraph.js
+../src/nodes/base.js
