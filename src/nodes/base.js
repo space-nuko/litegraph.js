@@ -24,10 +24,6 @@
         this.size = [140, 80];
         this.properties = { enabled: true };
         this.enabled = true;
-		// TEMP: Until ID reassignment is implemented
-		if (LiteGraph.use_uuids) {
-			this.clonable = false;
-		}
 
         //create inner graph
         this.subgraph = new LiteGraph.LGraph();
