@@ -5515,10 +5515,32 @@ LGraphNode.prototype.executeAction = function(action)
             if (!this._graph_stack) {
                 this._graph_stack = [];
             }
-            this._graph_stack.push(this.graph);
+            const offset = [this.ds.offset[0], this.ds.offset[1]]
+            this._graph_stack.push({ graph: this.graph, offset, scale: this.ds.scale });
         }
 
         graph.attachCanvas(this);
+
+        const offset = [0, 0]
+
+        if (graph._nodes.length > 0) {
+            let min_x = Number.MAX_SAFE_INTEGER;
+            let max_x = 0;
+            let min_y = Number.MAX_SAFE_INTEGER;
+            let max_y = 0;
+            for (const node of graph._nodes) {
+                min_x = Math.min(node.pos[0], min_x);
+                max_x = Math.max(node.pos[0] + node.size[0], max_x);
+                min_y = Math.min(node.pos[1], min_y);
+                max_y = Math.max(node.pos[1] + node.size[1], max_y);
+            }
+            offset[0] = -(min_x + (max_x - min_x) / 2) + this.canvas.width / 2;
+            offset[1] = -(min_y + (max_y - min_y) / 2) + this.canvas.height / 2;
+        }
+
+        this.ds.offset = offset;
+        this.ds.scale = 1
+
 		this.checkPanels();
         this.setDirty(true, true);
     };
@@ -5533,8 +5555,8 @@ LGraphNode.prototype.executeAction = function(action)
         if (!this._graph_stack || this._graph_stack.length == 0) {
             return;
         }
-        var subgraph_node = this.graph._subgraph_node;
-        var graph = this._graph_stack.pop();
+        const subgraph_node = this.graph._subgraph_node;
+        const { graph, offset, scale } = this._graph_stack.pop();
         this.selected_nodes = {};
         this.highlighted_links = {};
         graph.attachCanvas(this);
@@ -5543,9 +5565,14 @@ LGraphNode.prototype.executeAction = function(action)
             this.centerOnNode(subgraph_node);
             this.selectNodes([subgraph_node]);
         }
-        // when close sub graph back to offset [0, 0] scale 1
-        this.ds.offset = [0, 0]
-        this.ds.scale = 1
+        this.ds.offset = offset
+        this.ds.scale = scale
+    };
+
+    LGraphCanvas.prototype.closeAllSubgraphs = function() {
+        while (this._graph_stack && this._graph_stack.length > 0) {
+            this.closeSubgraph();
+		}
     };
 
     /**
@@ -8279,8 +8306,9 @@ LGraphNode.prototype.executeAction = function(action)
 		//show subgraph stack header
         if (this._graph_stack && this._graph_stack.length) {
             ctx.save();
-            var parent_graph = this._graph_stack[this._graph_stack.length - 1];
-            var subgraph_node = this.graph._subgraph_node;
+            const top_entry = this._graph_stack[this._graph_stack.length - 1];
+            const parent_graph = top_entry.graph;
+            const subgraph_node = this.graph._subgraph_node;
             ctx.strokeStyle = subgraph_node.bgcolor;
             ctx.lineWidth = 10;
             ctx.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
