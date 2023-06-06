@@ -8102,27 +8102,6 @@ LGraphNode.prototype.executeAction = function(action)
                 if (input.not_subgraph_input)
                     continue;
 
-                //input button clicked
-                if (this.drawButton(20, y + 2, w - 20, h - 2)) {
-                    var type = subnode.constructor.input_node_type || "graph/input";
-                    this.graph.beforeChange();
-                    var newnode = LiteGraph.createNode(type);
-                    if (newnode) {
-                        subgraph.add(newnode);
-                        this.block_click = false;
-                        this.last_click_position = null;
-                        this.selectNodes([newnode]);
-                        this.node_dragged = newnode;
-                        this.dragging_canvas = false;
-                        newnode.setProperty("name", input.name);
-                        newnode.setProperty("type", input.type);
-                        this.node_dragged.pos[0] = this.graph_mouse[0] - 5;
-                        this.node_dragged.pos[1] = this.graph_mouse[1] - 5;
-                        this.graph.afterChange();
-                    }
-                    else
-                        console.error("graph input node not found:", type);
-                }
                 ctx.fillStyle = "#9C9";
                 ctx.beginPath();
                 ctx.arc(w - 16, y + h * 0.5, 5, 0, 2 * Math.PI);
@@ -8172,27 +8151,6 @@ LGraphNode.prototype.executeAction = function(action)
                 if (output.not_subgraph_input)
                     continue;
 
-                //output button clicked
-                if (this.drawButton(canvas_w - w, y + 2, w - 20, h - 2)) {
-                    var type = subnode.constructor.output_node_type || "graph/output";
-                    this.graph.beforeChange();
-                    var newnode = LiteGraph.createNode(type);
-                    if (newnode) {
-                        subgraph.add(newnode);
-                        this.block_click = false;
-                        this.last_click_position = null;
-                        this.selectNodes([newnode]);
-                        this.node_dragged = newnode;
-                        this.dragging_canvas = false;
-                        newnode.setProperty("name", output.name);
-                        newnode.setProperty("type", output.type);
-                        this.node_dragged.pos[0] = this.graph_mouse[0] - 5;
-                        this.node_dragged.pos[1] = this.graph_mouse[1] - 5;
-                        this.graph.afterChange();
-                    }
-                    else
-                        console.error("graph input node not found:", type);
-                }
                 ctx.fillStyle = "#9C9";
                 ctx.beginPath();
                 ctx.arc(canvas_w - w + 16, y + h * 0.5, 5, 0, 2 * Math.PI);
@@ -12743,31 +12701,74 @@ LGraphNode.prototype.executeAction = function(action)
 					elem.querySelector(".name").innerText = input.name;
 					elem.querySelector(".type").innerText = input.type;
 					elem.querySelector("button").addEventListener("click",function(e){
-						node.removeInput( Number( this.parentNode.dataset["slot"] ) );
+                        const inputName = this.parentNode.dataset["name"]
+                        node.removeGraphInput(inputName);
 						inner_refresh();
 					});
 				}
+			node.graph.setDirtyCanvas(true, false);
 		}
 
-		//add extra
-		var html = " + <span class='label'>Name</span><input class='name'/><span class='label'>Type</span><input class='type'></input><button>+</button>";
-		var elem = panel.addHTML(html,"subgraph_property extra", true);
-		elem.querySelector("button").addEventListener("click", function(e){
-			var elem = this.parentNode;
-			var name = elem.querySelector(".name").value;
-			var type = elem.querySelector(".type").value;
-			if(!name || node.findInputSlot(name) != -1)
-				return;
-			node.addInput(name,type);
-			elem.querySelector(".name").value = "";
-			elem.querySelector(".type").value = "";
-			inner_refresh();
-		});
+        //add extra
+        var html = `
++
+<span class='label'>Name</span>
+<input class='name'/>
+<span class='label'>Type</span>
+<select class='type'></select>
+<button>+</button>`;
+        var elem = panel.addHTML(html, "subgraph_property extra", true);
+        const nameInput = elem.querySelector(".name");
+        const typeInput = elem.querySelector(".type");
+        const addButton = elem.querySelector("button");
 
-		inner_refresh();
-	    this.canvas.parentNode.appendChild(panel);
-		return panel;
+        for (const inType of LiteGraph.getSlotTypesIn()) {
+            var opt = document.createElement('option');
+            opt.value = inType
+            opt.innerHTML = LiteGraph.getSlotTypeName(inType)
+            typeInput.appendChild(opt);
+            if (inType === "*") {
+                opt.selected = true;
+            }
+        }
+
+        const addInput = () => {
+            const name = nameInput.value;
+            let type = typeInput.value;
+            if (type === "-1")
+                type = BuiltInSlotType.EVENT;
+
+            if (!name || node.findInputSlot(name) != -1)
+                return;
+
+            this.addGraphInputNode(node, name, type)
+            nameInput.value = "";
+            typeInput.value = "";
+            inner_refresh();
+            nameInput.focus();
+        }
+
+        const checkSubmit = (e) => {
+            if (e.keyCode == 13) {
+                addInput()
+                e.preventDefault();
+            }
+            else if (e.keyCode == 27) {
+                panel.close();
+                e.preventDefault();
+            }
+        }
+
+        addButton.addEventListener("click", addInput);
+        nameInput.addEventListener("keydown", checkSubmit);
+        typeInput.addEventListener("keydown", checkSubmit);
+
+        inner_refresh();
+        this.canvas.parentNode.appendChild(panel);
+        nameInput.focus();
+        return panel;
 	}
+
     LGraphCanvas.prototype.showSubgraphPropertiesDialogRight = function (node) {
 
         // console.log("showing subgraph properties dialog");
@@ -12796,52 +12797,158 @@ LGraphNode.prototype.executeAction = function(action)
                     elem.querySelector(".name").innerText = input.name;
                     elem.querySelector(".type").innerText = input.type;
                     elem.querySelector("button").addEventListener("click", function (e) {
-                        node.removeOutput(Number(this.parentNode.dataset["slot"]));
+                        const outputName = this.parentNode.dataset["name"]
+                        node.removeGraphOutput(outputName);
                         inner_refresh();
                     });
                 }
+			node.graph.setDirtyCanvas(true, false);
         }
 
         //add extra
-        var html = " + <span class='label'>Name</span><input class='name'/><span class='label'>Type</span><input class='type'></input><button>+</button>";
+        var html = `
++
+<span class='label'>Name</span>
+<input class='name'/>
+<span class='label'>Type</span>
+<select class='type'></select>
+<button>+</button>`;
         var elem = panel.addHTML(html, "subgraph_property extra", true);
-        elem.querySelector(".name").addEventListener("keydown", function (e) {
-            if (e.keyCode == 13) {
-                addOutput.apply(this)
+        const nameInput = elem.querySelector(".name");
+        const typeInput = elem.querySelector(".type");
+        const addButton = elem.querySelector("button");
+
+        for (const outType of LiteGraph.getSlotTypesOut()) {
+            var opt = document.createElement('option');
+            opt.value = outType
+            opt.innerHTML = LiteGraph.getSlotTypeName(outType)
+            typeInput.appendChild(opt);
+            if (outType === "*") {
+                opt.selected = true;
             }
-        })
-        elem.querySelector("button").addEventListener("click", function (e) {
-            addOutput.apply(this)
-        });
-        function addOutput() {
-            var elem = this.parentNode;
-            var name = elem.querySelector(".name").value;
-            var type = elem.querySelector(".type").value;
+        }
+
+        const addOutput = () => {
+            const name = nameInput.value;
+            let type = typeInput.value;
+            if (type === "-1")
+                type = BuiltInSlotType.EVENT;
+
             if (!name || node.findOutputSlot(name) != -1)
                 return;
-            node.addOutput(name, type);
-            elem.querySelector(".name").value = "";
-            elem.querySelector(".type").value = "";
+
+            this.addGraphOutputNode(node, name, type)
+            nameInput.value = "";
+            typeInput.value = "";
             inner_refresh();
+            nameInput.focus();
         }
+
+        const checkSubmit = (e) => {
+            if (e.keyCode == 13) {
+                addOutput()
+                e.preventDefault();
+            }
+            else if (e.keyCode == 27) {
+                panel.close();
+                e.preventDefault();
+            }
+        }
+
+        addButton.addEventListener("click", addOutput);
+        nameInput.addEventListener("keydown", checkSubmit);
+        typeInput.addEventListener("keydown", checkSubmit);
 
         inner_refresh();
         this.canvas.parentNode.appendChild(panel);
+        nameInput.focus();
         return panel;
     }
+
+    LGraphCanvas.prototype.addGraphInputNode = function(subgraphNode, name, type) {
+        // Check if there's already an input
+        const existing = this.graph.findNodesByType("graph/input")
+            .find(node => node.properties.name === name)
+
+        if (existing) {
+            this.selectNodes([existing])
+            return;
+        }
+
+        // graph input node must have a non-empty type
+        if (!type || type === "")
+            type = "*"
+
+        const pos = [
+            (this.canvas.width * 0.25) / this.ds.scale - this.ds.offset[0],
+            (this.canvas.height * 0.5) / this.ds.scale - this.ds.offset[1]
+        ]
+
+        this.graph.beforeChange();
+        const pair = subgraphNode.addGraphInput(name, type, pos);
+        if (pair) {
+            const newnode = pair.innerNode;
+            this.selectNodes([newnode]);
+            this.graph.afterChange();
+        }
+        else {
+            console.error("graph input node not found:", type);
+        }
+    }
+
+    LGraphCanvas.prototype.addGraphOutputNode = function(subgraphNode, name, type) {
+        // Check if there's already an output
+        const existing = this.graph.findNodesByType("graph/output")
+            .find(node => node.properties.name === name)
+
+        if (existing) {
+            this.selectNodes([existing])
+            return;
+        }
+
+        // graph output node must have a non-empty type
+        if (!type || type === "")
+            type = "*"
+
+        const pos = [
+            (this.canvas.width * 0.75) / this.ds.scale - this.ds.offset[0],
+            (this.canvas.height * 0.5) / this.ds.scale - this.ds.offset[1]
+        ]
+
+        this.graph.beforeChange();
+        const pair = subgraphNode.addGraphOutput(name, type, pos);
+        if (pair) {
+            const newnode = pair.innerNode;
+            this.selectNodes([newnode]);
+            this.graph.afterChange();
+        }
+        else {
+            console.error("graph input node not found:", type);
+        }
+    }
+
 	LGraphCanvas.prototype.checkPanels = function()
 	{
-		if(!this.canvas)
-			return;
-		var panels = this.canvas.parentNode.querySelectorAll(".litegraph.dialog");
-		for(var i = 0; i < panels.length; ++i)
-		{
-			var panel = panels[i];
-			if( !panel.node )
-				continue;
-			if( !panel.node.graph || panel.graph != this.graph )
-				panel.close();
-		}
+        if (!this.canvas)
+            return;
+
+        var panels = this.canvas.parentNode.querySelectorAll(".litegraph.dialog");
+        for (var i = 0; i < panels.length; ++i) {
+            var panel = panels[i]
+            if (!panel.node)
+                continue;
+            if (!panel.node.graph)
+                panel.close();
+
+            if (panel.node.graph != this.graph) {
+                if (panel.node.type === "graph/subgraph" && this.graph._is_subgraph && this.graph === panel.node.subgraph) {
+                    continue
+                }
+                else {
+                    panel.close();
+                }
+            }
+        }
 	}
 
     LGraphCanvas.onMenuNodeCollapse = function(value, options, e, menu, node) {

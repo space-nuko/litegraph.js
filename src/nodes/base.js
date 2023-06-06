@@ -390,7 +390,7 @@
 
 	Subgraph.prototype.getValidGraphInputName = function(baseName)
 	{
-        baseName ||= "newInput"
+        baseName = baseName ||"newInput"
         let name = baseName
         let existing = this.getInnerGraphInput(name)
         let i = 1;
@@ -403,7 +403,7 @@
 
 	Subgraph.prototype.getValidGraphOutputName = function(baseName)
 	{
-        baseName ||= "newOutput"
+        baseName = baseName || "newOutput"
         let name = baseName
         let existing = this.getInnerGraphOutput(name)
         let i = 1;
@@ -430,6 +430,114 @@
         })
 
         return graphOutput || null;
+    }
+
+    Subgraph.prototype.addGraphInput = function(name, type, pos) {
+        name = this.getValidGraphInputName(name)
+
+        const innerNode = LiteGraph.createNode("graph/input");
+        if (innerNode == null)
+            return null;
+
+        let outerType = type;
+
+        // console.debug("[Subgraph] addGraphInput", name, type, outerType, pos)
+
+        // These will run onPropertyChanged.
+        innerNode.setProperty("name", name)
+        innerNode.setProperty("type", type)
+
+        this.subgraph.add(innerNode);
+        const nodeSize = innerNode.computeSize();
+        if (pos)
+            innerNode.pos = [pos[0] - nodeSize[0] * 0.5, pos[1] - nodeSize[1] * 0.5];
+
+        // The following call will add an input slot to this node automatically from onSubgraphNewInput.
+        this.subgraph.addInput(name, outerType, null);
+
+        const outerInputIndex = this.inputs.length - 1;
+        const outerInput = this.inputs[outerInputIndex]
+
+        return { innerNode, outerInput, outerInputIndex }
+    }
+
+    Subgraph.prototype.addGraphOutput = function(name, type, pos) {
+        name = this.getValidGraphOutputName(name)
+
+        const innerNode = LiteGraph.createNode("graph/output");
+        if (innerNode == null)
+            return null;
+
+        let outerType = type;
+
+        // console.debug("[Subgraph] addGraphOutput", name, type, outerType, pos)
+
+        // These will run onPropertyChanged.
+        innerNode.setProperty("name", name)
+        innerNode.setProperty("type", type)
+
+        this.subgraph.add(innerNode);
+        const nodeSize = innerNode.computeSize();
+        if (pos)
+            innerNode.pos = [pos[0], pos[1] - nodeSize[1] * 0.5];
+
+        // The following call will add an output slot to this node automatically from onSubgraphNewOutput.
+        this.subgraph.addOutput(name, outerType, null);
+
+        const outerOutputIndex = this.outputs.length - 1;
+        const outerOutput = this.outputs[outerOutputIndex]
+
+        return { innerNode, outerOutput, outerOutputIndex }
+    }
+
+    Subgraph.prototype.removeGraphInput = function(inputName) {
+        const inputSlot = this.findInputSlot(inputName);
+        if (inputSlot == null) {
+            console.error("[Subgraph] No input in slot!", inputName)
+            return;
+        }
+
+        const innerNodes = this.subgraph.findNodesByType("graph/input").filter(n => n.properties.name === inputName);
+
+        if (innerNodes.length > 0) {
+            // Removing the nodes will also trigger removeInput from subgraph hooks
+            for (const node of innerNodes) {
+                this.subgraph.remove(node);
+            }
+        }
+        else {
+            console.warn("[Subgraph] No GraphInputs found on input removal", inputName)
+
+            // remove the input ourselves since no subgraph hook was triggered
+            const index = this.findInputSlot(inputName)
+            if (index !== -1)
+                this.removeInput(index);
+        }
+    }
+
+    Subgraph.prototype.removeGraphOutput = function(outputName) {
+        const outputSlot = this.findOutputSlot(outputName);
+        if (outputSlot == null) {
+            console.error("[Subgraph] No output in slot!", outputName)
+            return;
+        }
+
+        const innerNodes = this.subgraph.findNodesByType("graph/output").filter(n => n.properties.name === outputName);
+
+        if (innerNodes.length > 0) {
+            // Removing the nodes will also trigger removeOutput from subgraph hooks
+            for (const node of innerNodes) {
+                this.subgraph.remove(node);
+            }
+        }
+        else {
+            console.warn("[Subgraph] No GraphOutputs found on output removal", outputName)
+
+            // remove the output ourselves since no subgraph hook was triggered
+            const index = this.findOutputSlot(outputName)
+            if (index !== -1)
+                this.removeOutput(index);
+        }
     }
 
 	Subgraph.prototype.buildFromNodes = function(nodes)
@@ -527,6 +635,7 @@
     //Input for a subgraph
     function GraphInput() {
         this.addOutput("", "number");
+		this.clonable = false;
 
         this.name_in_graph = "";
         this.properties = {
@@ -719,6 +828,7 @@
     //Output for a subgraph
     function GraphOutput() {
         this.addInput("", "");
+		this.clonable = false;
 
         this.name_in_graph = "";
         this.properties = { name: "", type: "" };
