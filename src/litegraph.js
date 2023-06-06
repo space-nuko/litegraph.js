@@ -89,6 +89,8 @@
         AUTOHIDE_TITLE: 3,
         VERTICAL_LAYOUT: "vertical", // arrange nodes vertically
 
+		BASE_SLOT_TYPES: ["*", "array", "object", "number", "string", "enum", "boolean", "table"],
+
         proxy: null, //used to redirect calls
         node_images_path: "",
 
@@ -145,6 +147,9 @@
         // if true, all newly created nodes/links will use string UUIDs for their id fields instead of integers.
         // use this if you must have node IDs that are unique across all graphs and subgraphs.
         use_uuids: false,
+
+		// use a combo widget for selecting graph input/output types instead of a text box
+		graph_inputs_outputs_use_combo_widget: false,
 
         /**
          * Register a node class so it can be listed when the user wants to create a new one
@@ -612,6 +617,40 @@
             return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,a=>(a^Math.random()*16>>a/4).toString(16));
         },
 
+		getSlotTypeName: function(type) {
+			if (type === LiteGraph.EVENT || type === LiteGraph.ACTION) {
+				return "event"
+			}
+			else if (type === LiteGraph.DEFAULT) {
+				return "default"
+			}
+			return type;
+		},
+
+		getSlotTypesIn: function() {
+			let result = []
+			result = result.concat(LiteGraph.BASE_SLOT_TYPES)
+			result = result.concat([LiteGraph.EVENT])
+			result = result.concat(LiteGraph.slot_types_in)
+			return result
+		},
+
+		getSlotTypesInFormatted: function() {
+			return LiteGraph.getSlotTypesIn().map(LiteGraph.getSlotTypeName);
+		},
+
+		getSlotTypesOut: function() {
+			let result = []
+			result = result.concat(LiteGraph.BASE_SLOT_TYPES)
+			result = result.concat([LiteGraph.EVENT])
+			result = result.concat(LiteGraph.slot_types_out)
+			return result
+		},
+
+		getSlotTypesOutFormatted: function() {
+			return LiteGraph.getSlotTypesOut().map(LiteGraph.getSlotTypeName);
+		},
+
         /**
          * Returns if the types of two slots are compatible (taking into account wildcards, etc)
          * @method isValidConnection
@@ -884,6 +923,10 @@
             this.list_of_graphcanvas = [];
         }
         this.list_of_graphcanvas.push(graphcanvas);
+
+        if (graphcanvas.onGraphAttached) {
+            graphcanvas.onGraphAttached(this);
+        }
     };
 
     /**
@@ -902,6 +945,10 @@
         }
         graphcanvas.graph = null;
         this.list_of_graphcanvas.splice(pos, 1);
+
+        if (graphcanvas.onGraphDetached) {
+            graphcanvas.onGraphDetached(this);
+        }
     };
 
     /**

@@ -388,6 +388,50 @@
         return node;
     };
 
+	Subgraph.prototype.getValidGraphInputName = function(baseName)
+	{
+        baseName ||= "newInput"
+        let name = baseName
+        let existing = this.getInnerGraphInput(name)
+        let i = 1;
+        while (existing != null) {
+            name = `${baseName}_${i++}`
+            existing = this.getInnerGraphInput(name)
+        }
+        return name;
+	}
+
+	Subgraph.prototype.getValidGraphOutputName = function(baseName)
+	{
+        baseName ||= "newOutput"
+        let name = baseName
+        let existing = this.getInnerGraphOutput(name)
+        let i = 1;
+        while (existing != null) {
+            name = `${baseName}_${i++}`
+            existing = this.getInnerGraphOutput(name)
+        }
+        return name;
+	}
+
+    Subgraph.prototype.getInnerGraphInput = function(outerInputName) {
+        const graphInput = this.subgraph._nodes.find(n => {
+            return n.type === "graph/input"
+                && n.properties.name === outerInputName
+        })
+
+        return graphInput || null;
+    }
+
+    Subgraph.prototype.getInnerGraphOutput = function(outerOutputName) {
+        const graphOutput = this.subgraph._nodes.find(n => {
+            return n.type === "graph/output"
+                && n.properties.name === outerOutputName
+        })
+
+        return graphOutput || null;
+    }
+
 	Subgraph.prototype.buildFromNodes = function(nodes)
 	{
 		//clear all?
@@ -497,28 +541,33 @@
             "text",
             "Name",
             this.properties.name,
-            function(v) {
-                if (!v) {
-                    return;
-                }
-                that.setProperty("name",v);
-            }
+            this.setName.bind(this),
         );
-        this.type_widget = this.addWidget(
-            "text",
-            "Type",
-            this.properties.type,
-            function(v) {
-				that.setProperty("type",v);
-            }
-        );
+
+        if (LiteGraph.graph_inputs_outputs_use_combo_widget) {
+            this.type_widget = this.addWidget(
+                "combo",
+                "Type",
+                LiteGraph.getSlotTypeName(this.properties.type),
+                this.setType.bind(this),
+                { values: LiteGraph.getSlotTypesInFormatted }
+            );
+        }
+        else {
+            this.type_widget = this.addWidget(
+                "text",
+                "Type",
+                LiteGraph.getSlotTypeName(this.properties.type),
+                this.setType.bind(this),
+            );
+        }
 
         this.value_widget = this.addWidget(
             "number",
             "Value",
             this.properties.value,
             function(v) {
-                that.setProperty("value",v);
+                that.setProperty("value", v);
             }
         );
 
@@ -529,16 +578,43 @@
     GraphInput.title = "Input";
     GraphInput.desc = "Input of the graph";
 
-	GraphInput.prototype.onConfigure = function()
+	GraphInput.prototype.onConfigure = function()
 	{
 		this.updateType();
+	}
+
+	GraphInput.prototype.setName = function(v)
+	{
+        if (v == null || v === this.properties.name) {
+            return
+        }
+        const subgraph = this.graph._subgraph_node
+        if (!subgraph)
+            return;
+        v = subgraph.getValidGraphInputName(v);
+        this.setProperty("name", v);
+	}
+
+	GraphInput.prototype.setType = function(v)
+	{
+        if (!v) {
+            v = "*"
+        }
+
+        let type = v;
+        if (v === "-1" || v === "event")
+            type = LiteGraph.EVENT
+        else if (v === "0")
+            type = "*"
+
+        this.setProperty("type", type);
 	}
 
 	//ensures the type in the node output and the type in the associated graph input are the same
 	GraphInput.prototype.updateType = function()
 	{
 		var type = this.properties.type;
-		this.type_widget.value = type;
+		this.type_widget.value = LiteGraph.getSlotTypeName(type);
 
 		//update output
 		if(this.outputs[0].type != type)
@@ -648,57 +724,62 @@
         this.properties = { name: "", type: "" };
         var that = this;
 
-        // Object.defineProperty(this.properties, "name", {
-        //     get: function() {
-        //         return that.name_in_graph;
-        //     },
-        //     set: function(v) {
-        //         if (v == "" || v == that.name_in_graph) {
-        //             return;
-        //         }
-        //         if (that.name_in_graph) {
-        //             //already added
-        //             that.graph.renameOutput(that.name_in_graph, v);
-        //         } else {
-        //             that.graph.addOutput(v, that.properties.type);
-        //         }
-        //         that.name_widget.value = v;
-        //         that.name_in_graph = v;
-        //     },
-        //     enumerable: true
-        // });
+        this.name_widget = this.addWidget(
+            "text",
+            "Name",
+            this.properties.name,
+            this.setName.bind(this)
+        );
 
-        // Object.defineProperty(this.properties, "type", {
-        //     get: function() {
-        //         return that.inputs[0].type;
-        //     },
-        //     set: function(v) {
-        //         if (v == "action" || v == "event") {
-        //             v = LiteGraph.ACTION;
-        //         }
-		//         if (!LiteGraph.isValidConnection(that.inputs[0].type,v))
-		// 			that.disconnectInput(0);
-        //         that.inputs[0].type = v;
-        //         if (that.name_in_graph) {
-        //             //already added
-        //             that.graph.changeOutputType(
-        //                 that.name_in_graph,
-        //                 that.inputs[0].type
-        //             );
-        //         }
-        //         that.type_widget.value = v || "";
-        //     },
-        //     enumerable: true
-        // });
+        if (LiteGraph.graph_inputs_outputs_use_combo_widget) {
+            this.type_widget = this.addWidget(
+                "combo",
+                "Type",
+                LiteGraph.getSlotTypeName(this.properties.type),
+                this.setType.bind(this),
+                { values: LiteGraph.getSlotTypesOutFormatted }
+            );
+        }
+        else {
+            this.type_widget = this.addWidget(
+                "text",
+                "Type",
+                LiteGraph.getSlotTypeName(this.properties.type),
+                this.setType.bind(this),
+            );
+        }
 
-        this.name_widget = this.addWidget("text","Name",this.properties.name,"name");
-        this.type_widget = this.addWidget("text","Type",this.properties.type,"type");
         this.widgets_up = true;
         this.size = [180, 60];
     }
 
     GraphOutput.title = "Output";
     GraphOutput.desc = "Output of the graph";
+
+    GraphOutput.prototype.setName = function (v) {
+        if (v == null || v === this.properties.name) {
+            return
+        }
+        const subgraph = this.graph._subgraph_node
+        if (!subgraph)
+            return;
+        v = subgraph.getValidGraphOutputName(v);
+        this.setProperty("name", v);
+    }
+
+    GraphOutput.prototype.setType = function (v) {
+        if (!v) {
+            v = "*"
+        }
+
+        let type = v;
+        if (v === "-1" || v === "event")
+            type = LiteGraph.EVENT
+        else if (v === "0")
+            type = "*"
+
+        this.setProperty("type", type);
+    }
 
     GraphOutput.prototype.onPropertyChanged = function (name, v) {
         if (name == "name") {
@@ -726,7 +807,7 @@
     GraphOutput.prototype.updateType = function () {
         var type = this.properties.type;
         if (this.type_widget)
-            this.type_widget.value = type;
+            this.type_widget.value = LiteGraph.getSlotTypeName(type);
 
         //update output
         if (this.inputs[0].type != type) {
